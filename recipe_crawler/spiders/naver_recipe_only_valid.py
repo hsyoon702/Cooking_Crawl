@@ -105,7 +105,33 @@ class NaverRecipeSpider(scrapy.Spider):
         # 음식정보
         recipe['food'] = response.xpath(u"//h3[contains(text(), '음식정보')]/following-sibling::p[1]").extract()
 
-        
+        # 태그를 제거한다
+        for index, attr in recipe.items():
+            if (0 == len(attr)):
+                return
+            recipe[index] = strip_tags(attr[0]);
+
+        recipe['category'] = int(recipe['category'])
+        # 썸네일
+        recipe['thumb'] = response.xpath('//*[@id="innerImage0"]/@origin_src').extract()[0]
+
+        # ingredient convert
+        recipe['ingredient'] = recipe['ingredient'].replace(u'·', '\n').strip()
+
+        # basic에서 요리시간 추출
+        cooktime = re.search(ur"조리시간\s\:\s(\d{0,3})분", recipe['basic'])
+        if (cooktime != None):
+            recipe['cooktime'] = int(cooktime.groups()[0])
+
+        # basic에서 분량 추출
+        amount = re.search(ur"분량\s\:\s(\d{0,3})인분", recipe['basic'])
+        if (amount != None):
+            recipe['amount'] = int(amount.groups()[0])
+
+        # basic에서 칼로리 추출
+        calorie = re.search(ur"칼로리\s\:\s(\d{0,5})kcal", recipe['basic'])
+        if (calorie != None):
+            recipe['calorie'] = int(calorie.groups()[0])
 
         # food에서 다이어트 정보 추출
         #if (len(response.xpath(u"/self[contains(text(), '다이어트')]"))):
@@ -145,7 +171,21 @@ class NaverRecipeSpider(scrapy.Spider):
             else:
                 nextRange = u"/following-sibling::div[@class='tmp_source']"
 
-        
+        # 요리과정 텍스트
+        recipe['method'] = ''.join([strip_tags(x) for x in response.xpath((
+            u"//h4[contains(text(), '요리과정')]"
+            + nextRange +
+            u"/preceding-sibling::p[preceding-sibling::h4[contains(text(), '요리과정')]]"
+        )).extract()])
+
+        recipe['method'] = re.split(r"\d{0,2}\.\s", recipe['method'])
+
+        # 요리과정 이미지
+        recipe['methodThumb'] = response.xpath((
+            u"//h4[contains(text(), '요리과정')]"
+            + nextRange +
+            u"/preceding-sibling::div[preceding-sibling::h4[contains(text(), '요리과정')]]/a/img/@origin_src"
+        )).extract()
 
         # 작은 이미지 주소로 변환
         for index, thumbSrc in enumerate(recipe['methodThumb']):
@@ -157,6 +197,45 @@ class NaverRecipeSpider(scrapy.Spider):
         # 제목 변경
         recipe['title'] = recipe['title'].replace(u' 만드는 법', '')
 
-  
+        # """
+        # # 데이터를 줄이기 위해 불필요한 항목 삭제
+        # del recipe['basic']
+        # del recipe['food']
+        #
+        # # API
+        # api = 'http://localhost:1337/'
+        # api_resource = api + 'resources'
+        # api_recipe = api + 'recipes'
+        # api_method = api + 'methods'
+        #
+        # # 이미지 등록
+        # thumb = requests.post(api_resource, {
+        #     'reference': recipe['thumb']
+        # }).json()
+        #
+        # # 레시피 등록
+        # recipe['thumbnail'] = thumb['id']
+        #
+        # methodThumb = recipe['methodThumb']
+        # del recipe['methodThumb']
+        #
+        # method = recipe['method'];
+        # del recipe['method']
+        #
+        # res = requests.post(api_recipe, recipe).json()
+        #
+        # # 레시피 조리 과정 등록
+        # for thumb in methodThumb:
+        #     record = requests.post(api_resource, {
+        #         'reference': thumb,
+        #         'recipe': res['id']
+        #     })
+        #
+        # for m in method:
+        #     record = requests.post(api_method, {
+        #         'recipe': res['id'],
+        #         'content': m
+        #     })
+        # """
 
         yield recipe
